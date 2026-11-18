@@ -1,0 +1,49 @@
+{
+  "summary": "Full backend + frontend E2E pass on Surgiassist CRM with owner/manager/BDM. Backend: 20/20 pytest pass (auth, 5-fail lockout on throwaway email -> 429, RBAC 403s for BDM, BDM scoping, overview, exact single-date filter, filters/pagination/search, CSV export, follow-ups buckets + per-BDM, notifications/reminders, lead PATCH/notes, CRM edits survive manual sync, allocation run assigns an unassigned lead, normalization preview/save, team CRUD + manager limits, audit). Frontend: login/error, live countdown ticks, sync-now toast (admins only), KPIs + date change, charts, leaderboard (admin only), leads filters/pagination/export download, drawer save/timeline/note/reminder -> bell -> done, follow-ups date/BDM pick/tabs/Done, normalization tester + save, team add/toggle/delete, audit entries, BDM redirects, mobile hamburger at 390px all work with zero console errors. Two real bugs found: allocation treatment-priority chips cannot be toggled with a real mouse click, and saving the lead drawer without changing stage silently overwrites the sheet sub_status.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "PATCH /api/leads/{id}", "issue": "Any request containing `stage` (the drawer ALWAYS sends stage) sets sub_status = stage.upper() even if stage did not change. Result: opening a lead and clicking Save overwrites the granular sheet status (e.g. 'FUND ISSUE' -> 'LOST', 'DNP1' -> 'NOT REACHABLE', 'CALL BACK' -> 'FOLLOW UP') and adds 'sub_status' to edited_fields so future syncs never refresh it. Reproduced as BDM muskaan on lead 1853944155608417 (Sabiha); tester restored it in DB afterwards.", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "POST /api/sync", "issue": "Manual sync does not reset SYNC_STATE.next_sync_at, so the navbar countdown keeps counting the old auto schedule (an auto sync runs again within a few minutes of the manual one)."},
+      {"endpoint": "run_sync / normalize_row", "issue": "Rows without a numeric Lead ID get id = md5(name|phone|creation time) and duplicates get '-1','-2' suffixes by row order. If the sheet name/phone gets corrected or duplicate rows are reordered, CRM edits (stage/bdm/follow-up, activity) attach to the wrong lead or are dropped (delete_many on ids not seen), leaving orphaned activity/reminders."},
+      {"endpoint": "valid_date()", "issue": "Only regex-checks YYYY-MM-DD; '2026-13-45' is accepted and stored as follow_up_date."},
+      {"endpoint": "POST /api/auth/login", "issue": "Correct password on an inactive account counts as a failed attempt (can lock a deactivated user's email); response is the generic 401, fine. Auth uses Bearer token in localStorage, not httpOnly cookies (playbook item 2 not applicable by design); CORS '*' without credentials is consistent with that."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Allocation RuleCard treatment priority chips", "issue": "Chips do not toggle on a real mouse click (page.click and mouse.move+click both fail 7/7; only programmatic element.click() works). Captured events: pointerdown/mousedown land on the parent 'div.flex.flex-wrap', mouseup on the chip, so the browser dispatches click to the common ancestor and the button's onClick never runs. RCA: the TiltCard 3D rotateX/rotateY (useSpring on mousemove) plus `.chip:hover { transform: translateY(-1px) }` shifts the chip under the pointer between mousedown and mouseup. Fix: don't wrap interactive allocation cards in TiltCard (use plain glass div or intensity 0), and/or remove the chip hover transform, or handle toggle on onPointerDown.", "selector": "[data-testid^='allocation-priority-']", "priority": "HIGH"}
+    ],
+    "integration_issues": [
+      {"flow": "Lead drawer Save", "issue": "EditPanel always sends stage + follow_up_date even if they did not change, which triggers the sub_status overwrite described in backend critical issue. Send only changed fields.", "affected_selectors": ["[data-testid='drawer-save-button']"]}
+    ],
+    "design_issues": [
+      {"screen": "Leads filters, Overview, Follow-ups, Lead drawer", "issues": ["Uses native browser <input type=date> pickers and native <select> instead of shadcn Calendar/Popover and Select components; looks inconsistent with the glass theme"]},
+      {"screen": "Mobile topbar (390px)", "issues": ["Page title truncates to 'Leads & P…' because sync pill + bell take the row; consider hiding the sync label or shortening the title on mobile"]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_surgiassist_crm.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": [
+    "Fix allocation priority chips not toggling on real clicks (remove TiltCard tilt / chip hover transform on interactive cards)",
+    "PATCH /api/leads: only change sub_status (and log/add edited_fields) when stage actually differs from the stored stage; frontend drawer should send only changed fields",
+    "Reset SYNC_STATE.next_sync_at (or restart the loop timer) after a manual sync so the countdown restarts at 05:00",
+    "Use datetime.strptime validation in valid_date to reject impossible dates",
+    "Consider a more stable identity for rows without Lead ID so CRM edits are not lost/misattached when sheet rows change",
+    "Replace native date inputs/selects with shadcn Calendar/Select for design consistency"
+  ],
+  "critical_code_review_comments": [
+    "server.py update_lead: `changes['sub_status'] = changes['stage'].upper()` runs unconditionally when stage is present -> silent data overwrite + permanent sync lock of sub_status",
+    "run_sync deletes leads no longer in sheet but leaves their activity/reminders orphaned",
+    "Followups 'Done' always clears follow-up date (next_date '') with no UI to set the next date, although the API supports next_date",
+    "server.py is 648 lines - close to the 700 line limit; consider splitting routes into modules"
+  ],
+  "updated_files": ["/app/backend/tests/test_surgiassist_crm.py (new; replaced obsolete /app/backend/tests/backend_test.py that targeted removed /api/crm/* routes)"],
+  "success_rate": {"backend": "100% (20/20 pytest) - 1 logic bug found via UI (sub_status overwrite)", "frontend": "~92% (all flows pass except allocation priority chips)"},
+  "test_credentials": "Used /app/memory/test_credentials.md (owner/manager/muskaan, Surgiassist@2026) - all valid; bcrypt hashes start with $2b$; seed_users only inserts when missing.",
+  "seed_data_creation": "Temporary TEST_ users created and deleted by id. Lead 1109056035229291 (Deepshikha Dagar) was edited (stage/follow-up/bdm via allocation) and restored to original values (Follow Up / Ritik / 2026-11-18) but its edited_fields now contains [stage, follow_up_date, sub_status, bdm] so the sheet will no longer overwrite those fields for this lead; it also has TEST_ note/reminder activity entries (reminders marked done). Lead 1853944155608417 (Sabiha) sub_status was accidentally overwritten by the bug and restored in DB (sub_status FUND ISSUE, edited_fields []). Allocation settings saved back to defaults (all active, quota 15, no priorities, auto_assign false). Normalization rules re-saved unchanged.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run `pytest /app/backend/tests/test_surgiassist_crm.py` (export REACT_APP_BACKEND_URL first). The lead-mutation test picks a 'Follow Up' lead, edits it, syncs, unassigns + runs allocation with only one BDM active, then restores everything. Retest: allocation chips with real page.click (not JS click), and drawer Save-without-changes must not change sub_status/edited_fields (check a Lost lead with sub_status like 'FUND ISSUE').",
+  "rca of the issue": "Chips: mousedown target = parent flex div, mouseup target = chip -> click goes to ancestor; caused by framer-motion tilt transform + hover translate moving the chip under the cursor. sub_status: update_lead derives sub_status from stage whenever stage is in the payload, and LeadDrawer always includes stage. Repro: login as muskaan, open any lead whose sheet status differs from its stage name (e.g. FUND ISSUE / Lost), click Save changes -> Sheet status shows LOST and edited_fields gains sub_status."
+}

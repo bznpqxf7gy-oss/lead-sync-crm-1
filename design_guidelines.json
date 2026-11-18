@@ -1,0 +1,44 @@
+{
+  "typography": {
+    "font_family": "Plus Jakarta Sans, sans-serif",
+    "headings": "font-bold tracking-tight text-slate-900 dark:text-white",
+    "body": "font-normal text-slate-600 dark:text-slate-300",
+    "mono": "font-mono text-xs"
+  },
+  "colors": {
+    "primary": "#4F46E5",
+    "primary_hover": "#4338CA",
+    "secondary": "#06B6D4",
+    "background_light": "#F8FAFC",
+    "background_dark": "#0B0F19",
+    "surface_light": "#FFFFFF",
+    "surface_dark": "#111827",
+    "border_light": "#E2E8F0",
+    "border_dark": "#1F2937",
+    "accent": "#10B981"
+  },
+  "visual_enhancers": {
+    "glassmorphism": "backdrop-blur-xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/60 dark:border-slate-800/60 shadow-[0_8px_32px_rgba(0,0,0,0.08)]",
+    "card_hover": "transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:border-indigo-500/40",
+    "glow": "shadow-[0_0_25px_rgba(79,70,229,0.15)]"
+  },
+  "grids": {
+    "dashboard_grid": "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6",
+    "tetris_grid": "grid grid-cols-1 md:grid-cols-12 gap-8"
+  },
+  "motion": {
+    "default_transition": "transition-all duration-200 ease-in-out",
+    "framer_spring": {
+      "type": "spring",
+      "stiffness": 300,
+      "damping": 30
+    }
+  },
+  "accessibility": {
+    "contrast_ratio_target": "WCAG AA (4.5:1 for normal text, 3:1 for large text)",
+    "test_id_convention": "kebab-case data-testid attributes on all interactive elements"
+  },
+  "image_urls": [],
+  "component_path": "/app/frontend/src/components/",
+  "instructions_to_main_agent": "Build a production-ready Enterprise BDM CRM web application with live Google Sheets CSV auto-sync (every 5 minutes with countdown timer), role-based access control (Master Owner, Manager, BDM) with custom email/password and PIN authentication, treatment normalization engine (Bariatric Surgery, Varicose Veins, Liposuction, General Inquiry), single date filter leads pipeline, follow-ups due & overdue workload breakdown, BDM allocation quotas & treatment priority configuration, activity timelines, notes, audit logs, reminders, notifications, search, and CSV export. Ensure ultra-modern 3D depth, layered glassmorphism, interactive tilts, and smooth Framer Motion animations."
+}

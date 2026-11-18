@@ -1,0 +1,40 @@
+{
+  "summary": "Tested the Overview period filter (Today/Week/Month/Year/All/Pick date) on backend and frontend, plus the fix that reads Follow Up Date by position. Every feature in the request works. Backend: 13/13 new tests pass, and their counts were checked against MongoDB directly. Full regression: 54/55 passed; 1 flaky. UI: on every period, the KPI, day-arrived, assigned+unassigned, treatment total, stage total and leaderboard total all match (today 67, week 16-22 Nov 209, month Nov 896, year 2026 2129, all 2342, 17 Nov 81). Today is the default and the date input only shows after clicking Pick date. Clicking a leaderboard row on a single day goes to /leads?bdm=Usman&date=2026-11-17. Muskaan (BDM) sees only her own leads, no leaderboard and 0 unassigned. At 390px there is no horizontal overflow and the buttons wrap. The sheet header after Status is ' ' (blank); follow-up dates are read: overdue 656, due today 115-116.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/overview", "issue": "A ?date=YYYY-MM-DD with no period is now ignored and silently returns today (it used to return that day). This breaks old callers and old tests; I updated the tests to send period=date or period=all."},
+      {"endpoint": "/api/overview", "issue": "overdue, due_today and all_time_leads do not follow the selected period. They look like 'as of today' or global numbers by design, but the KPI cards don't say so."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Overview", "issues": [
+        "Pick date uses the browser's built-in date input instead of the shadcn Calendar/Popover picker.",
+        "The selected period lives only in component state, so going back from /leads resets it to Today. Consider keeping it in the URL (?period=&date=).",
+        "The BDM subtitle 'Here's your personal pipeline today.' doesn't change when another period is picked.",
+        "The first load sends GET /overview?period=today twice (probably React StrictMode or a double effect). Harmless."
+      ]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_iteration4_overview_period.py", "/app/backend/tests/test_surgiassist_crm.py", "/app/backend/tests/test_iteration3_features.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": [
+    "Optional: treat /api/overview?date=X with no period as period=date, for backward compatibility.",
+    "Optional: label the Due today / Overdue / All-time cards as not following the selected period.",
+    "Optional: replace the built-in date input with the shadcn Calendar, and keep the period in the URL."
+  ],
+  "critical_code_review_comments": [
+    "period_range and the overview logic are correct: week is Mon-Sun, month is the calendar month, year is the calendar year, bad dates return 400 through valid_date.",
+    "The sheet_rows fallback only works if the blank header is directly after 'status'. If the sheet columns move again it will quietly stop reading dates; consider a warning log when no follow-up column is found.",
+    "The overview endpoint makes about 8 sequential DB calls. Fine at the current size of 2.3k leads."
+  ],
+  "updated_files": ["/app/backend/tests/test_iteration4_overview_period.py", "/app/backend/tests/test_surgiassist_crm.py", "/app/backend/tests/test_iteration3_features.py"],
+  "success_rate": {"backend": "100% (new); 98% full regression (1 flaky)", "frontend": "100%"},
+  "flaky_tests": ["test_surgiassist_crm.py::TestLeadMutations::test_edit_note_reminder_sync_allocation: failed once in the parallel xdist run, passed when run alone (likely a race with a concurrent sync)."],
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run with REACT_APP_BACKEND_URL exported. The iteration-4 test reads MongoDB directly to compute expected counts for each office_date range. Server date is 2026-11-18 IST. Old tests now use period=all or period=date for /api/overview."
+}

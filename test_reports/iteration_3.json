@@ -1,0 +1,48 @@
+{
+  "summary": "Iteration 3: tested all 7 new features (backend + UI). Backend 41/42 pytest pass (new file test_iteration3_features.py + regression suite). Verified office-day logic (unit + data consistency on 200 leads), overview day block == /api/leads counts, attendance GET/PUT + allocation skipping off BDMs (UI: marked 8 BDMs off, Run now -> lead assigned to Muskaan only), cron 401/200/dedupe by X-Webhook-Id, WhatsApp digest (MOCKED outbox, 9 cards, counts match /api/followups, phone shown after Team blur save), campaign report math + filter, follow-up Done dialog with next date + note (timeline text correct), profile change-password on TEMP user (wrong current / mismatch / success / re-login), BDM 403 on new APIs and page redirects to /overview. Only failure: cron endpoints return 400 when POSTed with no body.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/cron/morning-allocation, /api/cron/whatsapp-digest", "issue": "With a valid bearer but EMPTY body, request.json() raises and the endpoint returns 400 'Invalid body'. If the platform cron POSTs without a JSON body, the 9:55 allocation and 10:00 digest never run. Fix: read raw body and treat empty/invalid as {} (still ack 2xx)."},
+      {"endpoint": "build_whatsapp_digest", "issue": "Lines use f'+{phone}' but many lead phones are 10-digit without country code (e.g. +8130918825, +7291019124) -> invalid numbers in the message. Prefix 91 when len==10."},
+      {"endpoint": "build_whatsapp_digest", "issue": "Overdue list sorted ascending and capped at 10 -> BDM sees the oldest (Oct) overdue patients, not the most recent. Also, if a BDM is marked off after the digest was prepared, their stale outbox entry for today is not removed."},
+      {"endpoint": "PATCH /api/leads/{id} (bdm)", "issue": "assigned_on is set to today on every bdm patch (incl. setting Unassigned or re-setting same BDM), which inflates 'Assigned today' and consumes daily quota. Only set when bdm actually changes to a non-empty value."},
+      {"endpoint": "run_allocation", "issue": "today's load counts_by({'assigned_on': today}) lacks is_test:False filter (allocation GET uses it) - minor inconsistency."},
+      {"endpoint": "POST /api/auth/change-password", "issue": "Existing JWTs remain valid after password change (no token invalidation). Low priority."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Team phone edit", "issue": "user-phone-<email> saves on blur correctly but no success toast was observed, so user gets no confirmation.", "affected_selectors": ["[data-testid^='user-phone-']"]}
+    ],
+    "design_issues": [
+      {"screen": "WhatsApp Digest header", "issues": ["whatsapp-date-input stretches very wide and the 'Prepare today's messages' button wraps below it - looks unbalanced (w-auto not applied in PageHeader actions)."]},
+      {"screen": "All date pickers (overview, leads, attendance, follow-up done, whatsapp)", "issues": ["Native browser <input type=date> used instead of shadcn Calendar/Popover."]},
+      {"screen": "Allocation BDM cards", "issues": ["Cards don't indicate that a BDM is Off today (only the attendance chips do)."]},
+      {"screen": "BDM overview day block", "issues": ["'Left unassigned' tile is always 0 for BDM role - consider hiding for BDMs."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_iteration3_features.py", "/app/backend/tests/test_surgiassist_crm.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": [
+    "Make cron endpoints tolerate empty/non-JSON body (return 200 accepted and run job)",
+    "Normalize phone numbers in WhatsApp digest (add 91 for 10-digit)",
+    "Sort overdue in digest newest-first (or most urgent) and delete outbox entries for BDMs off that day on re-run",
+    "Only set assigned_on when bdm actually changes to a real BDM",
+    "Show toast on Team phone save; fix WhatsApp header input width"
+  ],
+  "critical_code_review_comments": [
+    "server.py is 802 lines (>700) - split into routers (auth, leads, allocation, whatsapp/cron, reports)",
+    "cron_accept: body parsing failure blocks scheduled jobs (see backend minor #1)",
+    "Digest phone formatting assumes country code present",
+    "PATCH bdm side effect on assigned_on/quota"
+  ],
+  "updated_files": ["/app/backend/tests/test_surgiassist_crm.py (date filter test now checks office_date)", "/app/backend/tests/test_iteration3_features.py (new)"],
+  "success_rate": {"backend": "97.6% (41/42)", "frontend": "100% of tested flows"},
+  "test_credentials": "owner/manager/muskaan @surgiassist.com / Surgiassist@2026 (unchanged; password change tested on TEMP users which were deleted)",
+  "seed_data_creation": "None persisted. Temp TEST_ users created and deleted. Attendance for 2026-11-18 restored to off=[]; allocation rules restored; Muskaan phone restored to ''; digest re-run so outbox reflects restored phone. Side effects: a few leads had bdm/follow_up_date patched then restored to original values - they now have bdm/follow_up_date in edited_fields and assigned_on=2026-11-18 (inflates Assigned today for Usman/Aquib/Muskaan by 1-2). 2 TEST_ cron_runs docs and audit entries added.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run pytest with -n0 (serial) since tests mutate shared attendance/allocation. Cron secret read from /app/backend/.env WEBHOOK_CRON_SECRET. test_cron_empty_body is the only failing test (expected to pass after fix). Attendance chips load async - wait for [data-testid=attendance-muskaan] before counting. Server date 2026-11-18 IST.",
+  "rca of the issue": "Cron 400: cron_accept calls `await request.json()` and maps ValueError (JSONDecodeError on empty body) to HTTP 400. Reproduce: curl -X POST $URL/api/cron/whatsapp-digest -H 'Authorization: Bearer <secret>' (no body) -> 400 {'detail':'Invalid body'}. Mitigation: `raw = await request.body(); body = json.loads(raw) if raw.strip() else {}` inside try, default {} on error."
+}
